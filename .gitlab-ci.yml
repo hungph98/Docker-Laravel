@@ -1,0 +1,29 @@
+stages:
+  - Quality
+  - Deployment
+
+Code checker:
+  image: php:7.4
+  allow_failure: false
+  before_script:
+    - curl -s https://git.miichisoft.net/cicd/base_source/-/raw/v2/code_quality_check.txt | bash
+  script:
+    - bash .gitlab/ci/report_api.sh "${CI_PROJECT_ID}" "${CI_MERGE_REQUEST_IID}" "${TOKEN}" "${ENDPOINT}" "${CI_PROJECT_DIR}" "./source"
+    - (if [ -f ./php_code_sniffer_report.json ]; then false; else true; fi)
+  stage: Quality
+  only:
+    - merge_requests
+SSH:
+  stage: Deployment
+  allow_failure: false
+  before_script:
+    - 'which sshpass || ( apt-get update -y && apt-get install sshpass -y )'
+  script:
+    - sshpass -p $SSH_PASSWORD ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_SERVER_IP -p 22 "
+      cd ${PATH_TO_PROJECT}
+      && git pull origin develop
+      && docker-compose exec -T php php artisan migrate
+      && docker-compose exec -T php composer install"
+  only:
+    - develop
+  when: manual
